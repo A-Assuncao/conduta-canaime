@@ -27,7 +27,7 @@ def execute_playwright_task(selected_units, queue, stop_event):
     all_units_data = {}
     try:
         # Chama o Login e verifica se ele retorna None (fechou sem autenticar)
-        page = Login(test=True)
+        page = Login(test=False)
         if page is None:  # Se Login retornar None, encerra o script
             sys.exit()  # Encerra o script
 
