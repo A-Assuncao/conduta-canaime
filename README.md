@@ -26,7 +26,7 @@ Certifique-se de que as seguintes bibliotecas estejam instaladas:
 Para instalar as dependências, você pode usar o seguinte comando:
 
 ```bash
-pip install pandas openpyxl playwright login-canaime
+pip install pandas openpyxl playwright
 ```
 
 ### Instalando o Playwright
