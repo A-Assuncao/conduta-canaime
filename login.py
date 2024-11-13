@@ -4,11 +4,11 @@ from playwright.sync_api import sync_playwright
 import itertools
 import time
 import subprocess
-import sys
 
 LOGIN_URL = 'https://canaime.com.br/sgp2rr/login/login_principal.php'  # URL de login do sistema Canaimé
 
 class CanaimeLoginInterface:
+    # noinspection PyInterpreter
     def __init__(self, root, test_mode=False):
         self.root = root
         self.test_mode = test_mode
@@ -103,9 +103,6 @@ class CanaimeLoginInterface:
             return
 
         try:
-            # Verifique se o Chromium está instalado
-            subprocess.run(["playwright", "install", "chromium"], check=True)
-
             with sync_playwright() as playwright:
                 self.browser = playwright.chromium.launch(headless=not self.test_mode)
                 context = self.browser.new_context()
@@ -123,8 +120,8 @@ class CanaimeLoginInterface:
                 else:
                     self.show_error("Usuário ou senha inválidos.")
 
-        except Exception:
-            self.show_error("Erro de conexão, tente mais tarde...")
+        except Exception as e:
+            self.show_error(e)
 
     def perform_login(self, page, username, password):
         """Realiza o processo de login utilizando Playwright."""
