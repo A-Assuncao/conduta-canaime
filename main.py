@@ -21,30 +21,27 @@ browser = playwright.chromium.launch(headless=False)
 
 def execute_playwright_task(selected_units, queue, stop_event):
     """
-    Executa a coleta de dados de cada unidade selecionada. Navega até a página de cada unidade prisional, coleta a
-    lista de presos e, em seguida, acessa a página de cada preso para obter informações detalhadas, incluindo a conduta.
+    Executa a coleta de dados de cada unidade selecionada, primeiro coletando a lista de presos para cada unidade
+    e, em seguida, acessando a página de cada preso para obter informações detalhadas de conduta.
     """
     all_units_data = {}
+
     try:
         # Chama o Login e verifica se ele retorna None (fechou sem autenticar)
         page = Login(test=False)
-        if page is None:  # Se Login retornar None, encerra o script
+        if page is None:
             sys.exit()  # Encerra o script
 
-        def coletar_conduta(cdg, nome):
-            page.goto(certidao + cdg)
-            page.wait_for_load_state('networkidle')
-            conduta = page.locator('tr:nth-child(11) .titulo12bk+ .titulobk').text_content()
-            return conduta
-
+        # Primeira etapa: Coletar lista de presos de cada unidade
         for unit in selected_units:
             if stop_event.is_set():
                 break
 
-            queue.put(f"Navegando para a unidade {unit}...")
+            queue.put(f"Navegando para a unidade {unit} para coletar a lista de presos...")
             page.goto(chamada + unit, timeout=60000)
             page.wait_for_load_state('networkidle')
 
+            # Coleta a lista de presos na unidade
             tudo = page.locator('.titulobkSingCAPS')
             nomes = page.locator('.titulobkSingCAPS .titulo12bk')
             count = tudo.count()
@@ -57,23 +54,36 @@ def execute_playwright_task(selected_units, queue, stop_event):
                     tudo_tratado = tudo.nth(i).text_content().replace(" ", "").strip()
                     [codigo, _, _, _, alas] = tudo_tratado.split('\n')
                     preso = nomes.nth(i).text_content().strip()
-                    cdg = codigo[2:]
+                    cdg = codigo[2:]  # Remove prefixo do código
                     ala = alas[-3:]
                     unit_list.append((cdg, ala, preso))
                 except Exception as e:
                     queue.put(f"Erro ao coletar lista de presos da unidade {unit}, índice {i}: {str(e)}")
                     continue
 
-            total_presos = len(unit_list)
-            queue.put(f"Buscando conduta carcerária de um total de {total_presos} presos")
+            all_units_data[unit] = unit_list
+            queue.put(f"Lista de {count} presos coletada para a unidade {unit}.")
+
+        # Segunda etapa: Percorrer a lista de presos e coletar a conduta para cada um
+        for unit, unit_list in all_units_data.items():
+            if stop_event.is_set():
+                break
+            queue.put(f"Coletando condutas para a unidade {unit}...")
 
             unit_data = []
             for idx, (cdg, ala, nome) in enumerate(unit_list):
                 if stop_event.is_set():
                     break
                 try:
-                    conduta = coletar_conduta(cdg, nome)
-                    restantes = total_presos - (idx + 1)
+                    # Navega até a página do preso para coletar a conduta
+                    page.goto(certidao + cdg, timeout=10000)
+                    page.wait_for_load_state('networkidle')
+                    try:
+                        conduta = page.locator('tr:nth-child(11) .titulo12bk+ .titulobk').text_content(timeout=5000)
+                    except Exception:
+                        conduta = "Conduta não encontrada"
+
+                    restantes = len(unit_list) - (idx + 1)
                     queue.put(f"{cdg} - {nome}, Conduta {conduta}, restam {restantes} presos")
                     unit_data.append((cdg, ala, nome, conduta))
                 except Exception as e:
@@ -81,8 +91,11 @@ def execute_playwright_task(selected_units, queue, stop_event):
                     continue
 
             all_units_data[unit] = unit_data
+            queue.put(f"Condutas coletadas para todos os presos da unidade {unit}.")
 
-        queue.put(all_units_data)
+        # Chama salvar_excel após todas as unidades serem processadas
+        salvar_excel(all_units_data)
+        queue.put("Processo de coleta e salvamento concluído!")
 
     except Exception as e:
         queue.put(f"Erro no Playwright: {str(e)}")
@@ -94,6 +107,15 @@ def execute_playwright_task(selected_units, queue, stop_event):
             playwright.stop()
         except Exception as e:
             queue.put(f"Erro ao fechar o Playwright: {str(e)}")
+
+        # Fecha a janela do Tkinter e encerra o script
+        try:
+            root.quit()
+            root.destroy()
+        except Exception as e:
+            queue.put(f"Erro ao fechar a janela Tkinter: {str(e)}")
+
+        sys.exit()  # Encerra completamente o script
 
 
 def salvar_excel(all_units_data):
@@ -157,7 +179,7 @@ def selecionar_unidades():
 
     root = tk.Tk()
     root.title("Seleção de Unidades Prisionais")
-    root.geometry("400x300")
+    root.geometry("500x300")
     root.eval('tk::PlaceWindow . center')
     root.attributes('-topmost', True)
 
