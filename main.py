@@ -52,10 +52,9 @@ def execute_playwright_task(selected_units, queue, stop_event):
                     break
                 try:
                     tudo_tratado = tudo.nth(i).text_content().replace(" ", "").strip()
-                    [codigo, _, _, _, alas] = tudo_tratado.split('\n')
+                    [codigo, _, _, _, ala] = tudo_tratado.split('\n')
                     preso = nomes.nth(i).text_content().strip()
                     cdg = codigo[2:]  # Remove prefixo do código
-                    ala = alas[-3:]
                     unit_list.append((cdg, ala, preso))
                 except Exception as e:
                     queue.put(f"Erro ao coletar lista de presos da unidade {unit}, índice {i}: {str(e)}")
@@ -76,18 +75,23 @@ def execute_playwright_task(selected_units, queue, stop_event):
                     break
                 try:
                     # Navega até a página do preso para coletar a conduta
-                    page.goto(certidao + cdg, timeout=10000)
+                    page.goto(certidao + cdg, timeout=0)
                     page.wait_for_load_state('networkidle')
                     try:
-                        conduta = page.locator('tr:nth-child(11) .titulo12bk+ .titulobk').text_content(timeout=5000)
-                    except Exception:
-                        conduta = "Conduta não encontrada"
+                        conduta = page.locator('tr:nth-child(11) .titulo12bk+ .titulobk').text_content(timeout=0)
+                        obs = ""
+                    except Exception as e:
+                        conduta = "INDISPONÍVEL"
+                        obs = str(e)
 
                     restantes = len(unit_list) - (idx + 1)
                     queue.put(f"{cdg} - {nome}, Conduta {conduta}, restam {restantes} presos")
-                    unit_data.append((cdg, ala, nome, conduta))
+                    unit_data.append((cdg, ala, nome, conduta, obs))
                 except Exception as e:
+                    conduta = "INDISPONÍVEL"
+                    obs = str(e)
                     queue.put(f"Erro ao coletar conduta do preso {nome} (Código: {cdg}): {str(e)}")
+                    unit_data.append((cdg, ala, nome, conduta, obs))
                     continue
 
             all_units_data[unit] = unit_data
@@ -126,7 +130,7 @@ def salvar_excel(all_units_data):
     wb.remove(wb.active)
 
     for up, data in all_units_data.items():
-        df = pd.DataFrame(data, columns=["Código", "Ala", "Preso", "Conduta"])
+        df = pd.DataFrame(data, columns=["Código", "Ala", "Preso", "Conduta", "OBS."])
         ws = wb.create_sheet(title=up)
         for r in dataframe_to_rows(df, index=False, header=True):
             ws.append(r)
